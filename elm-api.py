@@ -1,7 +1,6 @@
 from flask import Flask, jsonify, request
 from elm import code_suggest
 
- 
 # instance of flask application
 app = Flask(__name__)
  

@@ -4,16 +4,9 @@ import os
 import xml.etree.ElementTree as ET
 import openai
 import ast
-import nltk
 import spacy
-import string
 
 nlp = spacy.load('en_core_web_sm')
-
-'''Necessary downloads for NLTK'''
-'''nltk.download('averaged_perceptron_tagger')
-nltk.download('maxent_ne_chunker')
-nltk.download('words')'''
 
 def connect_to_openai():
     '''method to connect with OpenAI API'''
@@ -78,17 +71,22 @@ def refine_methods(enterprise_name, lang, code):
         function_names = []
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef):
-                code = code.replace(node.name, enterprise_name.lower() + '_fn_' + node.name)
+                pname=node.name.split('_')
+                if (enterprise_name.lower() not in pname) and 'sp' not in pname:
+                    code = code.replace(node.name, enterprise_name.lower() + '_fn_' + node.name)
     elif lang=='sql':
         pattern = r'CREATE\s+FUNCTION\s+(\w+)'
         function_names = re.findall(pattern, code, re.IGNORECASE)
         for fname in function_names:
-            code = code.replace(fname, enterprise_name.lower() + '_fn_' + fname)
+            if (enterprise_name.lower() not in fname) and 'sp' not in fname:
+                fname=fname.split('_')
+                code = code.replace(fname, enterprise_name.lower() + '_fn_' + fname)
         pattern = r'CREATE\s+PROCEDURE\s+(\w+)'
         sp_names = re.findall(pattern, code, re.IGNORECASE)
         for sname in sp_names:
-            code = code.replace(sname, enterprise_name.lower() + '_sp_' + sname)
-
+            sname=sname.split('_')
+            if (enterprise_name.lower() not in sname) and 'sp' not in sname:
+                code = code.replace(sname, enterprise_name.lower() + '_sp_' + sname)
     return code
 
 def find_sp_names(sql_script):
@@ -141,42 +139,26 @@ def tokenize_sentence(hint):
 
 def code_suggest(lang, hint):
     model = connect_to_openai()
-
-    attrib = read_lang_config("match", lang)
-    instructions=get_config_match('instructions', attrib)
-    attrib = read_lang_config("match", lang)
+    attrib_lang = read_lang_config("match", lang)
+    instructions=get_config_match('instructions', attrib_lang)
     instructions=instructions.replace('lang_name', lang)
-
     hint = clean_hint(hint)
     hint = lemmatize_txt(hint)
-    #hint = remove_passwords(hint)
+    hint = remove_api_keys(hint)
     hint=change_named_entity(hint)
-
-    attrib = read_lang_config("match", lang)
-    hint_prefix=get_config_match('hint_prefix', attrib)
+    hint_prefix=get_config_match('hint_prefix', attrib_lang)
     hint = hint_prefix + hint
-
-    #hint = tokenize_sentence(hint)
-
-    print(hint)
-
+    hint = tokenize_sentence(hint)
     code = get_response(model, instructions, hint)
-
-    attrib = read_lang_config("match", lang)
-    code = enterprise_finetuning(code, attrib)
-
-    attrib = read_lang_config("match", 'enterprise')
-    enterprise_name = get_config_match('enterprise_name', attrib)
-
+    code = enterprise_finetuning(code, attrib_lang)
+    attrib_enterprise = read_lang_config("match", 'enterprise')
+    enterprise_name = get_config_match('enterprise_name', attrib_enterprise)
     code = refine_methods(enterprise_name, lang, code)
-
-    attrib = read_lang_config("match", lang)
-    initial_comment=get_config_match('initial_comment', attrib)
-
+    initial_comment=get_config_match('initial_comment', attrib_lang)
     initial_comment=initial_comment.replace('enterprise_name', enterprise_name)
     code = initial_comment + '\n' + code
-    #HINT = remove_api_keys(HINT)
     return code
 
-gen_code = code_suggest('python','write code to find the file extension')
+'''Model Test'''
+gen_code = code_suggest('lang','hint')
 print(gen_code)
