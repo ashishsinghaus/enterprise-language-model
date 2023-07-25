@@ -160,5 +160,5 @@ def code_suggest(lang, hint):
     return code
 
 '''Model Test'''
-gen_code = code_suggest('lang','hint')
+gen_code = code_suggest('sql','query to find holiday list')
 print(gen_code)
