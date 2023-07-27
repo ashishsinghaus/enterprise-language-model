@@ -71,22 +71,40 @@ def refine_methods(enterprise_name, lang, code):
         function_names = []
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef):
-                pname=node.name.split('_')
-                if (enterprise_name.lower() not in pname) and 'sp' not in pname:
-                    code = code.replace(node.name, enterprise_name.lower() + '_fn_' + node.name)
+                name_part=node.name.split('_')
+                if (enterprise_name.lower() not in name_part):
+                    if ('fn' in name_part):
+                        code = code.replace(node.name, enterprise_name.lower() + '_' + node.name)
+                    else:
+                        code = code.replace(node.name, enterprise_name.lower() + '_fn_' + node.name)
+                else:
+                    if ('fn' not in name_part):
+                        code = code.replace(enterprise_name.lower() + '_', enterprise_name.lower() + '_fn_')
     elif lang=='sql':
         pattern = r'CREATE\s+FUNCTION\s+(\w+)'
         function_names = re.findall(pattern, code, re.IGNORECASE)
-        for fname in function_names:
-            if (enterprise_name.lower() not in fname) and 'sp' not in fname:
-                fname=fname.split('_')
-                code = code.replace(fname, enterprise_name.lower() + '_fn_' + fname)
+        for name in function_names:
+            name_part=name.split('_')
+            if (enterprise_name.lower() not in name_part):
+                if ('fn' in name_part):
+                    code = code.replace(name, enterprise_name.lower() + '_' + name)
+                else:
+                    code = code.replace(name, enterprise_name.lower() + '_fn_' + name)
+            else:
+                if ('fn' not in name_part):
+                    code = code.replace(enterprise_name.lower() + '_', enterprise_name.lower() + '_fn_')
         pattern = r'CREATE\s+PROCEDURE\s+(\w+)'
         sp_names = re.findall(pattern, code, re.IGNORECASE)
-        for sname in sp_names:
-            sname=sname.split('_')
-            if (enterprise_name.lower() not in sname) and 'sp' not in sname:
-                code = code.replace(sname, enterprise_name.lower() + '_sp_' + sname)
+        for name in sp_names:
+            name_part=name.split('_')
+            if (enterprise_name.lower() not in name_part):
+                if ('sp' in name_part):
+                    code = code.replace(name, enterprise_name.lower() + '_' + name)
+                else:
+                    code = code.replace(name, enterprise_name.lower() + '_sp_' + name)
+            else:
+                if ('sp' not in name_part):
+                    code = code.replace(enterprise_name.lower() + '_', enterprise_name.lower() + '_sp_')
     return code
 
 def find_sp_names(sql_script):
@@ -137,7 +155,32 @@ def tokenize_sentence(hint):
         filtered_hint=filtered_hint + ' ' + ftoken
     return filtered_hint
 
-def code_suggest(lang, hint):
+def case_conversion(code, case):
+    tree = ast.parse(code)
+    variables = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+            variables.add(node.id)
+    for variable in variables:
+        var=variable
+        if(case == 'pascal'):
+            var = variable.replace("_", " ").title().replace(" ", "")
+        elif (case == 'snake'):
+            var = [variable[0].lower()]
+            for c in variable[1:]:
+                if c in ('ABCDEFGHIJKLMNOPQRSTUVWXYZ'):
+                    var.append('_')
+                    var.append(c.lower())
+                else:
+                    var.append(c)
+            var = ''.join(var)
+        elif (case == 'camel'):
+            var = variable.split('_')
+            var = var[0] + ''.join(ele.title() for ele in var[1:])
+        code = code.replace(variable, var)
+    return code
+
+def code_complete(lang, hint):
     model = connect_to_openai()
     attrib_lang = read_lang_config("match", lang)
     instructions=get_config_match('instructions', attrib_lang)
@@ -146,13 +189,15 @@ def code_suggest(lang, hint):
     hint = lemmatize_txt(hint)
     hint = remove_api_keys(hint)
     hint=change_named_entity(hint)
-    hint_prefix=get_config_match('hint_prefix', attrib_lang)
-    hint = hint_prefix + hint
+    hint_suffix=get_config_match('hint_suffix', attrib_lang)
+    hint = hint + hint_suffix
     hint = tokenize_sentence(hint)
     code = get_response(model, instructions, hint)
     code = enterprise_finetuning(code, attrib_lang)
     attrib_enterprise = read_lang_config("match", 'enterprise')
     enterprise_name = get_config_match('enterprise_name', attrib_enterprise)
+    case=get_config_match('case', attrib_lang)
+    code = case_conversion(code, case)
     code = refine_methods(enterprise_name, lang, code)
     initial_comment=get_config_match('initial_comment', attrib_lang)
     initial_comment=initial_comment.replace('enterprise_name', enterprise_name)
@@ -160,5 +205,5 @@ def code_suggest(lang, hint):
     return code
 
 '''Model Test'''
-gen_code = code_suggest('sql','query to find holiday list')
+gen_code = code_complete('python','declare 3 variable EmployeeName, employeeAge and employeeSalary using pascal case')
 print(gen_code)
