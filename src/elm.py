@@ -1,15 +1,16 @@
 '''import librarries'''
 import re
 import os
-import xml.etree.ElementTree as ET
-import openai
 import ast
+import xml.etree.ElementTree as ET
 import spacy
+import openai
 
+#load language library
 nlp = spacy.load('en_core_web_sm')
 
 def connect_to_openai():
-    '''method to connect with OpenAI API'''
+    '''authorise the connection to OpenAI api'''
     openai.organization = "org-WTPCAZdWARkJoItCjU9VV1WE"
     openai.api_key = ""
     openai.Model.list()
@@ -33,7 +34,7 @@ def get_response(model_input, instruction, hint_input):
     return response['choices'][0]['message']['content']
 
 def enterprise_finetuning(code_input, match_replace):
-    '''method to finetune the suggested code for enterprise'''
+    '''replacing config key-matches in response text'''
     for match in match_replace:
             if str(match) !='{}':
                 for key, value in match.items():
@@ -42,7 +43,7 @@ def enterprise_finetuning(code_input, match_replace):
     return code_input
 
 def get_config_match(match_input, match_replace):
-    '''method to finetune the suggested code for enterprise'''
+    '''find the config keys from configuration'''
     matched=''
     for match in match_replace:
             if str(match) !='{}':
@@ -52,7 +53,7 @@ def get_config_match(match_input, match_replace):
     return str(matched)
 
 def read_lang_config(tag_value, lang_input):
-    '''method to read language configurations'''
+    '''read from language configuration files'''
     current_dir = os.path.dirname(__file__)
     tree = ET.parse(current_dir + "/" + lang_input + "-config.xml")
     root = tree.getroot()
@@ -66,6 +67,7 @@ def read_lang_config(tag_value, lang_input):
     return match_replace_list
 
 def refine_methods(enterprise_name, lang, code):
+    '''apply enterprise code conventions on methods'''
     if lang=='python':
         tree = ast.parse(code)
         function_names = []
@@ -107,28 +109,28 @@ def refine_methods(enterprise_name, lang, code):
                     code = code.replace(enterprise_name.lower() + '_', enterprise_name.lower() + '_sp_')
     return code
 
-def find_sp_names(sql_script):
-    pattern = r'CREATE\s+PROCEDURE\s+(\w+)'
-    stored_procedures = re.findall(pattern, sql_script, re.IGNORECASE)
-    return stored_procedures
-
 def remove_passwords(hint):
+    '''replace the confidential credentials from input text'''
     pattern = r"\b[A-Za-z0-9@#$%^&+=]{8,}\b"
     return re.sub(pattern, "password", hint)
 
 def remove_api_keys(hint):
+    '''remove confidential keys from input text'''
     pattern = r"[A-Za-z0-9]{32}"
     return re.sub(pattern, "sample-key-", hint)
 
 def remove_bank_details(hint):
+    '''remove the bank details from input text'''
     pattern = r"\b(?:\d{4}-){3}\d{4}\b|\b(?:\d{4} ){3}\d{4}\b|\b(?:\d{4}\.){3}\d{4}\b"
     return re.sub(pattern, "", hint)
 
 def remove_personal_details(hint):
+    '''remove individual information from input text'''
     pattern = r'\b(\d{4}-\d{2}-\d{2}|\d{3}-\d{2}-\d{4}|(\d{3}\s?){3}|\d{4}\s\d{4}\s\d{4}\s\d{4})\b'
     return re.sub(pattern, '[REDACTED]', hint)
 
 def change_named_entity(hint):
+    '''replace the organization names used into input text'''
     doc=nlp(hint)
     for ent in doc.ents:
         if ent.label_ == 'ORG':
@@ -136,10 +138,12 @@ def change_named_entity(hint):
     return hint
 
 def clean_hint(txt):
+    '''clean the input text for text preprocessing'''
     txt=txt.lower()
     return txt
 
 def lemmatize_txt(txt):
+    '''lemmatize input text to produce more meaningful and language friendly word tokens for input'''
     sentence=[]
     document=nlp(txt)
     for word in document:
@@ -147,7 +151,7 @@ def lemmatize_txt(txt):
     return " ".join(sentence)
 
 def tokenize_sentence(hint):
-    nlp = spacy.load('en_core_web_sm')
+    '''tokenize the input text to remove unwanted word tokens and reduce the overall token size'''
     doc = nlp(hint)
     filtered_tokens = [token.text for token in doc if token.is_stop == False]
     filtered_hint=''
@@ -156,6 +160,7 @@ def tokenize_sentence(hint):
     return filtered_hint
 
 def case_conversion(code, case):
+    '''apply variable naming case convention as per the enterprise language configuration'''
     tree = ast.parse(code)
     variables = set()
     for node in ast.walk(tree):
@@ -181,6 +186,7 @@ def case_conversion(code, case):
     return code
 
 def code_complete(lang, hint):
+    '''main mathod to trigger the code completion processing'''
     model = connect_to_openai()
     attrib_lang = read_lang_config("match", lang)
     instructions=get_config_match('instructions', attrib_lang)
