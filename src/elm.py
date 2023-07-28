@@ -153,36 +153,37 @@ def lemmatize_txt(txt):
 def tokenize_sentence(hint):
     '''tokenize the input text to remove unwanted word tokens and reduce the overall token size'''
     doc = nlp(hint)
-    filtered_tokens = [token.text for token in doc if token.is_stop == False]
+    filtered_tokens = [token.text for token in doc if token.is_stop is False]
     filtered_hint=''
     for ftoken in filtered_tokens:
         filtered_hint=filtered_hint + ' ' + ftoken
     return filtered_hint
 
-def case_conversion(code, case):
+def case_conversion(code, case, lang):
     '''apply variable naming case convention as per the enterprise language configuration'''
-    tree = ast.parse(code)
-    variables = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
-            variables.add(node.id)
-    for variable in variables:
-        var=variable
-        if(case == 'pascal'):
-            var = variable.replace("_", " ").title().replace(" ", "")
-        elif (case == 'snake'):
-            var = [variable[0].lower()]
-            for c in variable[1:]:
-                if c in ('ABCDEFGHIJKLMNOPQRSTUVWXYZ'):
-                    var.append('_')
-                    var.append(c.lower())
-                else:
-                    var.append(c)
-            var = ''.join(var)
-        elif (case == 'camel'):
-            var = variable.split('_')
-            var = var[0] + ''.join(ele.title() for ele in var[1:])
-        code = code.replace(variable, var)
+    if lang=='python':
+        tree = ast.parse(code)
+        variables = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+                variables.add(node.id)
+        for variable in variables:
+            var=variable
+            if(case == 'pascal'):
+                var = variable.replace("_", " ").title().replace(" ", "")
+            elif (case == 'snake'):
+                var = [variable[0].lower()]
+                for c in variable[1:]:
+                    if c in ('ABCDEFGHIJKLMNOPQRSTUVWXYZ'):
+                        var.append('_')
+                        var.append(c.lower())
+                    else:
+                        var.append(c)
+                var = ''.join(var)
+            elif (case == 'camel'):
+                var = variable.split('_')
+                var = var[0] + ''.join(ele.title() for ele in var[1:])
+            code = code.replace(variable, var)
     return code
 
 def code_complete(lang, hint):
@@ -203,13 +204,13 @@ def code_complete(lang, hint):
     attrib_enterprise = read_lang_config("match", 'enterprise')
     enterprise_name = get_config_match('enterprise_name', attrib_enterprise)
     case=get_config_match('case', attrib_lang)
-    code = case_conversion(code, case)
+    code = case_conversion(code, case, lang)
     code = refine_methods(enterprise_name, lang, code)
     initial_comment=get_config_match('initial_comment', attrib_lang)
     initial_comment=initial_comment.replace('enterprise_name', enterprise_name)
     code = initial_comment + '\n' + code
     return code
 
-'''Model Test'''
-gen_code = code_complete('python','declare 3 variable EmployeeName, employeeAge and employeeSalary using pascal case')
+#Model Test
+gen_code = code_complete('sql','query to get the student details')
 print(gen_code)

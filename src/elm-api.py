@@ -3,10 +3,10 @@ from elm import code_complete
 
 # instance of flask application
 app = Flask(__name__)
- 
+
 # home route that returns below text when root url is accessed
 @app.route("/")
-def code_complete():
+def code_suggest():
     lang = request.args.get('lang')
     hint = request.args.get('hint')
     return code_complete(lang, hint)
