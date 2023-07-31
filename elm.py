@@ -160,111 +160,51 @@ def tokenize_sentence(hint):
     return filtered_hint
 
 def case_conversion(code, case, lang):
-    '''apply variable naming case convention as per the enterprise language configuration'''
+    '''apply variable naming case convention as per the enterprise language configurations'''
+    vrariables_list = []
     if lang=='python':
         tree = ast.parse(code)
         variables = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
                 variables.add(node.id)
-        for variable in variables:
-            var=variable
-            if(case == 'pascal'):
-                var = variable.replace("_", " ").title().replace(" ", "")
-            elif (case == 'snake'):
-                var = [variable[0].lower()]
-                for c in variable[1:]:
-                    if c in ('ABCDEFGHIJKLMNOPQRSTUVWXYZ'):
-                        var.append('_')
-                        var.append(c.lower())
-                    else:
-                        var.append(c)
-                var = ''.join(var)
-            elif (case == 'camel'):
-                var = variable.split('_')
-                var = var[0] + ''.join(ele.title() for ele in var[1:])
-            code = code.replace(variable, var)
-    elif (lang == 'sql'):
+        vrariables_list = list(variables)
+    if (lang == 'sql'):
         pattern = r'(?<!\w)@[a-zA-Z_][a-zA-Z0-9_]*'
         variables = re.findall(pattern, code)
-        vars=[]
-        for variable in variables:
-            vars.append(variable.strip('@'))
-        for variable in vars:
-            var=variable
-            camel = check_camel_snake(var)
-            if (camel is True):
-                var = variable.split('_')
-                var = var[0] + ''.join(ele.title() for ele in var[1:])
-            pascal = check_pascal_snake(var)
-            if (pascal is True):
-                var = variable.replace("_", " ").title().replace(" ", "")
-            snake = check_snake_snake(var)
-            if (snake is True):
-                var = [variable[0].lower()]
-                for c in variable[1:]:
-                    if c in ('ABCDEFGHIJKLMNOPQRSTUVWXYZ'):
-                        var.append('_')
-                        var.append(c.lower())
+        vrariables_list=variables
+    vars=[]
+    for variable in vrariables_list:
+        vars.append(variable.strip('@'))
+    for variable in vars:
+        var=variable
+        if (case == 'camel'):
+            var = [variable[0].lower()]
+            prev_var=''
+            for c in variable[1:]:
+                if c == '_':
+                    prev_var='_'
+                else:
+                    if(prev_var=='_'):
+                        var.append(c.upper())
                     else:
                         var.append(c)
-                var = ''.join(var)
+                    prev_var=''
+            var = "".join(var)
+        if (case == 'pascal'):
+            var = variable.split('_')
+            var = var[0].title() + ''.join(ele.title() for ele in var[1:])
+        if (case == 'snake'):
+            var = [variable[0].lower()]
+            for c in variable[1:]:
+                if c in ('ABCDEFGHIJKLMNOPQRSTUVWXYZ'):
+                    var.append('_')
+                    var.append(c.lower())
+                else:
+                    var.append(c)
+            var = ''.join(var)
         code = code.replace(variable, var)
     return code
-
-def convert_snake_snake_to_camel_snake(snake_snake):
-    words = snake_snake.split('_')
-    return words[0] + ''.join(word.title() for word in words[1:])
-
-def convert_camel_snake_to_snake_snake(camel_snake):
-    result = ''
-    for char in camel_snake:
-        if char.isupper():
-            result += '_' + char.lower()
-        else:
-            result += char
-    return result.lstrip('_')
-
-def convert_variable_snake(variable, snake):
-    if snake == 'snake_snake':
-        return convert_camel_snake_to_snake_snake(variable)
-    elif snake == 'camelCase':
-        return convert_snake_snake_to_camel_snake(variable)
-    else:
-        return variable
-
-def convert_sql_script_variable_snake(sql_script, snake):
-    lines = sql_script.split('\n')
-    converted_lines = [] #list initialization
-    for line in lines:
-        if line.startswith('DECLARE') or line.startswith('SET'):
-            words = line.split()
-            variable = words[1]
-            converted_variable = convert_variable_snake(variable, snake)
-            converted_line = line.replace(variable, converted_variable)
-            converted_lines.append(converted_line)
-        else:
-            converted_lines.append(line)
-    return '\n'.join(converted_lines)
-
-def check_camel_snake(string):
-    if not string:
-        return False
-    
-    if string[0].isupper():
-        return False
-    
-    for char in string:
-        if char.isupper():
-            return True
-    
-    return False
-
-def check_pascal_snake(string):
-    return re.match(r'^[A-Z][a-zA-Z0-9]*$', string) is not None
-
-def check_snake_snake(string):
-    return string.islower() and "_" not in string
 
 def code_complete(lang, hint):
     '''main mathod to trigger the code completion processing'''
@@ -283,15 +223,13 @@ def code_complete(lang, hint):
     code = enterprise_finetuning(code, attrib_lang)
     attrib_enterprise = read_lang_config("match", 'enterprise')
     enterprise_name = get_config_match('enterprise_name', attrib_enterprise)
-    #case=get_config_match('case', attrib_lang)
-    #code = case_conversion(code, case, lang)
+    case=get_config_match('case', attrib_lang)
+    code = case_conversion(code, case, lang)
     code = refine_methods(enterprise_name, lang, code)
     initial_comment=get_config_match('initial_comment', attrib_lang)
     initial_comment=initial_comment.replace('enterprise_name', enterprise_name)
-    code = initial_comment + '\n' + code
     return code
 
 #Model Test
-#gen_code = code_complete('sql','create stored procedure with 5 parameter inputs')
-#gen_code = code_complete('python','program to check whether a name convention is in snake case or not')
-#print(gen_code)
+gen_code = code_complete('python','write a program to assign value to variables Student_Name, Student_Age')
+print(gen_code)
