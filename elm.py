@@ -231,5 +231,5 @@ def code_complete(lang, hint):
     return code
 
 #Model Test
-gen_code = code_complete('python','write a program to assign value to variables Student_Name, Student_Age')
-print(gen_code)
+# gen_code = code_complete('javascript','create a function to call api using axios')
+# print(gen_code)
