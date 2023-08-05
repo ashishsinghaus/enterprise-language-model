@@ -68,46 +68,49 @@ def read_lang_config(tag_value, lang_input):
 
 def refine_methods(enterprise_name, lang, code):
     '''apply enterprise code conventions on methods'''
-    if lang=='python':
-        tree = ast.parse(code)
-        function_names = []
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef):
-                name_part=node.name.split('_')
+    try:
+        if lang=='python':
+            tree = ast.parse(code)
+            function_names = []
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef):
+                    name_part=node.name.split('_')
+                    if (enterprise_name.lower() not in name_part):
+                        if ('fn' in name_part):
+                            code = code.replace(node.name, enterprise_name.lower() + '_' + node.name)
+                        else:
+                            code = code.replace(node.name, enterprise_name.lower() + '_fn_' + node.name)
+                    else:
+                        if ('fn' not in name_part):
+                            code = code.replace(enterprise_name.lower() + '_', enterprise_name.lower() + '_fn_')
+        elif lang=='sql':
+            pattern = r'CREATE\s+FUNCTION\s+(\w+)'
+            function_names = re.findall(pattern, code, re.IGNORECASE)
+            for name in function_names:
+                name_part=name.split('_')
                 if (enterprise_name.lower() not in name_part):
                     if ('fn' in name_part):
-                        code = code.replace(node.name, enterprise_name.lower() + '_' + node.name)
+                        code = code.replace(name, enterprise_name.lower() + '_' + name)
                     else:
-                        code = code.replace(node.name, enterprise_name.lower() + '_fn_' + node.name)
+                        code = code.replace(name, enterprise_name.lower() + '_fn_' + name)
                 else:
                     if ('fn' not in name_part):
                         code = code.replace(enterprise_name.lower() + '_', enterprise_name.lower() + '_fn_')
-    elif lang=='sql':
-        pattern = r'CREATE\s+FUNCTION\s+(\w+)'
-        function_names = re.findall(pattern, code, re.IGNORECASE)
-        for name in function_names:
-            name_part=name.split('_')
-            if (enterprise_name.lower() not in name_part):
-                if ('fn' in name_part):
-                    code = code.replace(name, enterprise_name.lower() + '_' + name)
+            pattern = r'CREATE\s+PROCEDURE\s+(\w+)'
+            sp_names = re.findall(pattern, code, re.IGNORECASE)
+            for name in sp_names:
+                name_part=name.split('_')
+                if (enterprise_name.lower() not in name_part):
+                    if ('sp' in name_part):
+                        code = code.replace(name, enterprise_name.lower() + '_' + name)
+                    else:
+                        code = code.replace(name, enterprise_name.lower() + '_sp_' + name)
                 else:
-                    code = code.replace(name, enterprise_name.lower() + '_fn_' + name)
-            else:
-                if ('fn' not in name_part):
-                    code = code.replace(enterprise_name.lower() + '_', enterprise_name.lower() + '_fn_')
-        pattern = r'CREATE\s+PROCEDURE\s+(\w+)'
-        sp_names = re.findall(pattern, code, re.IGNORECASE)
-        for name in sp_names:
-            name_part=name.split('_')
-            if (enterprise_name.lower() not in name_part):
-                if ('sp' in name_part):
-                    code = code.replace(name, enterprise_name.lower() + '_' + name)
-                else:
-                    code = code.replace(name, enterprise_name.lower() + '_sp_' + name)
-            else:
-                if ('sp' not in name_part):
-                    code = code.replace(enterprise_name.lower() + '_', enterprise_name.lower() + '_sp_')
-    return code
+                    if ('sp' not in name_part):
+                        code = code.replace(enterprise_name.lower() + '_', enterprise_name.lower() + '_sp_')
+        return code
+    except:
+        return code
 
 def remove_passwords(hint):
     '''replace the confidential credentials from input text'''
@@ -161,50 +164,53 @@ def tokenize_sentence(hint):
 
 def case_conversion(code, case, lang):
     '''apply variable naming case convention as per the enterprise language configurations'''
-    vrariables_list = []
-    if lang=='python':
-        tree = ast.parse(code)
-        variables = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
-                variables.add(node.id)
-        vrariables_list = list(variables)
-    if (lang == 'sql'):
-        pattern = r'(?<!\w)@[a-zA-Z_][a-zA-Z0-9_]*'
-        variables = re.findall(pattern, code)
-        vrariables_list=variables
-    vars=[]
-    for variable in vrariables_list:
-        vars.append(variable.strip('@'))
-    for variable in vars:
-        var=variable
-        if (case == 'camel'):
-            var = [variable[0].lower()]
-            prev_var=''
-            for c in variable[1:]:
-                if c == '_':
-                    prev_var='_'
-                else:
-                    if(prev_var=='_'):
-                        var.append(c.upper())
+    try:
+        vrariables_list = []
+        if lang=='python':
+                tree = ast.parse(code)
+                variables = set()
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+                        variables.add(node.id)
+                vrariables_list = list(variables)
+        if (lang == 'sql'):
+            pattern = r'(?<!\w)@[a-zA-Z_][a-zA-Z0-9_]*'
+            variables = re.findall(pattern, code)
+            vrariables_list=variables
+        vars=[]
+        for variable in vrariables_list:
+            vars.append(variable.strip('@'))
+        for variable in vars:
+            var=variable
+            if (case == 'camel'):
+                var = [variable[0].lower()]
+                prev_var=''
+                for c in variable[1:]:
+                    if c == '_':
+                        prev_var='_'
+                    else:
+                        if(prev_var=='_'):
+                            var.append(c.upper())
+                        else:
+                            var.append(c)
+                        prev_var=''
+                var = "".join(var)
+            if (case == 'pascal'):
+                var = variable.split('_')
+                var = var[0].title() + ''.join(ele.title() for ele in var[1:])
+            if (case == 'snake'):
+                var = [variable[0].lower()]
+                for c in variable[1:]:
+                    if c in ('ABCDEFGHIJKLMNOPQRSTUVWXYZ'):
+                        var.append('_')
+                        var.append(c.lower())
                     else:
                         var.append(c)
-                    prev_var=''
-            var = "".join(var)
-        if (case == 'pascal'):
-            var = variable.split('_')
-            var = var[0].title() + ''.join(ele.title() for ele in var[1:])
-        if (case == 'snake'):
-            var = [variable[0].lower()]
-            for c in variable[1:]:
-                if c in ('ABCDEFGHIJKLMNOPQRSTUVWXYZ'):
-                    var.append('_')
-                    var.append(c.lower())
-                else:
-                    var.append(c)
-            var = ''.join(var)
-        code = code.replace(variable, var)
-    return code
+                var = ''.join(var)
+            code = code.replace(variable, var)
+        return code
+    except:
+        return code
 
 def code_complete(lang, hint):
     '''main mathod to trigger the code completion processing'''
@@ -215,10 +221,10 @@ def code_complete(lang, hint):
     hint = clean_hint(hint)
     hint = lemmatize_txt(hint)
     hint = remove_api_keys(hint)
-    hint=change_named_entity(hint)
+    # hint=change_named_entity(hint)
     hint_suffix=get_config_match('hint_suffix', attrib_lang)
     hint = hint + hint_suffix
-    hint = tokenize_sentence(hint)
+    #hint = tokenize_sentence(hint)
     code = get_response(model, instructions, hint)
     code = enterprise_finetuning(code, attrib_lang)
     attrib_enterprise = read_lang_config("match", 'enterprise')
@@ -231,5 +237,5 @@ def code_complete(lang, hint):
     return code
 
 #Model Test
-# gen_code = code_complete('javascript','create a function to call api using axios')
+# gen_code = code_complete('python','function to print z pattern')
 # print(gen_code)
